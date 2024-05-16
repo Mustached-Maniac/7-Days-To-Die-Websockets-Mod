@@ -1,11 +1,6 @@
-﻿using System;
-using System.Reflection;
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using HarmonyLib;
-
-//original work done by KK
-//modifications for patching weaponType and headshots added from Mustached_Maniac
 
 namespace _7DTDWebsockets.patchs
 {
@@ -26,19 +21,6 @@ namespace _7DTDWebsockets.patchs
         }
     }
 
-    class ReflectionUtils
-    {
-        public static object GetValue(object obj, string field)
-        {
-            if (obj == null) return null;
-            if (field == null) return null;
-            Type type = obj.GetType();
-            FieldInfo info = type.GetField(field, BindingFlags.NonPublic | BindingFlags.Instance);
-            if (info == null) return null;
-            return info.GetValue(obj);
-        }
-    }
-
     public class Player
     {
         public string name;
@@ -51,19 +33,6 @@ namespace _7DTDWebsockets.patchs
         public Player(EntityPlayer player)
         {
             this.name = player.EntityName;
-        }
-    }
-
-    class PlayerDmgEvent
-    {
-        public Player player;
-        public string cause;
-        public int damage;
-        public PlayerDmgEvent(Player player, string cause, int damage)
-        {
-            this.player = player;
-            this.cause = cause;
-            this.damage = damage;
         }
     }
 
@@ -86,36 +55,6 @@ namespace _7DTDWebsockets.patchs
         }
     }
 
-    class PlayerEntityEvent
-    {
-        public Player player;
-        public string entity;
-        public PlayerEntityEvent(Player player, string entity)
-        {
-            this.player = player;
-            this.entity = entity;
-        }
-    }
-
-    class PlayerOnlyEvent
-    {
-        public Player player;
-        public PlayerOnlyEvent(Player player)
-        {
-            this.player = player;
-        }
-    }
-
-    class PlayerDeathEvent
-    {
-        public Player player;
-        public PlayerDeathEvent(Player player)
-        {
-            this.player = player;
-        }
-    }
-
-    //updated payload to include weaponType and headshot bool
     [HarmonyPatch(typeof(EntityAlive), "SetDead")]
     class PatchEntityDeath
     {
@@ -144,55 +83,16 @@ namespace _7DTDWebsockets.patchs
 
             _7DTDWebsockets.API.Send("PlayerKillEntity", JsonConvert.SerializeObject(new PlayerKillEntityEvent(new Player(player), ent, animal, zombie, weaponType, headshot)));
 
-            if (animal && !zombie)
-            {
-                _7DTDWebsockets.API.Send("PlayerKillAnimal", JsonConvert.SerializeObject(new PlayerEntityEvent(new Player(player), ent)));
-            }
-
-            if (zombie)
-            {
-                _7DTDWebsockets.API.Send("PlayerKillZombie", JsonConvert.SerializeObject(new PlayerEntityEvent(new Player(player), ent)));
-            }
-
             return true;
         }
     }
-    //added to check for the headshots
+
     [HarmonyPatch(typeof(EntityAlive), "damageEntityLocal")]
     class PatchDamageEntityLocal
     {
         static void Postfix(DamageResponse __result)
         {
             RunTimePatch.IsHeadshot = __result.HitBodyPart == EnumBodyPartHit.Head;
-        }
-    }
-    //included the headshot tag with the payload
-    [HarmonyPatch]
-    class DamagePatches
-    {
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(NetPackageDamageEntity), "ProcessPackage")]
-        static void DamageEntityPacketProccessPrefix(NetPackage __instance, World _world, GameManager _callbacks)
-        {
-            string name = NetPackageManager.GetPackageName(__instance.PackageId);
-            if (name != "NetPackageDamageEntity") return;
-            NetPackageDamageEntity damage = (NetPackageDamageEntity)__instance;
-            int entityId = (int)ReflectionUtils.GetValue(damage, "entityId");
-            Entity entity = _world.GetEntity(entityId);
-            if (entity == null || !(entity is EntityPlayer)) return;
-            EnumDamageTypes damageType = (EnumDamageTypes)ReflectionUtils.GetValue(damage, "damageTyp");
-            int dmg = (ushort)ReflectionUtils.GetValue(damage, "strength");
-            _7DTDWebsockets.API.Send("PlayerDamage", JsonConvert.SerializeObject(new PlayerDmgEvent(new Player((EntityPlayer)entity), damageType.ToString(), dmg)));
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(EntityAlive), "DamageEntity")]
-        static void EntityAliveDamagePrefix(EntityAlive __instance, DamageSource _damageSource, int _strength, bool _criticalHit, float _impulseScale = 1f)
-        {
-            if (!(__instance is EntityPlayer)) return;
-            EntityPlayer player = (EntityPlayer)__instance;
-            _7DTDWebsockets.API.Send("PlayerDamage", JsonConvert.SerializeObject(new PlayerDmgEvent(new Player(player), _damageSource.damageType.ToString(), _strength)));
-            return;
         }
     }
 }

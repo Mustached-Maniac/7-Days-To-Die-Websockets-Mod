@@ -19,16 +19,16 @@ namespace _7DTDWebsockets.Connections
 {
     internal class HttpConnection
     {
-        public HttpServer server { get; private set; }
-        private string authentication;
+        public HttpServer Server { get; private set; }
+        private readonly string authentication;
 
         public HttpConnection(int port, string auth)
         {
             if (!string.IsNullOrEmpty(auth))
                 authentication = GetHash(auth);
-            server = new HttpServer(port);
-            server.OnGet += Server_OnGet;
-            server.OnPost += Server_OnPost;
+            Server = new HttpServer(port);
+            Server.OnGet += Server_OnGet;
+            Server.OnPost += async (sender, e) => await Server_OnPost(sender, e);
         }
 
         private string GetHash(string raw)
@@ -85,7 +85,7 @@ namespace _7DTDWebsockets.Connections
             res.Close();
         }
 
-        private async void Server_OnPost(object sender, HttpRequestEventArgs e)
+        private async Task Server_OnPost(object sender, HttpRequestEventArgs e)
         {
             var req = e.Request;
             var res = e.Response;
@@ -108,12 +108,14 @@ namespace _7DTDWebsockets.Connections
             string content = "";
             if (req.HasEntityBody)
             {
-                Stream stream = req.InputStream;
-                Encoding encoding = req.ContentEncoding;
-                StreamReader reader = new StreamReader(stream, encoding);
-                content = reader.ReadToEnd();
-                stream.Close();
-                reader.Close();
+                using (Stream stream = req.InputStream)
+                {
+                    Encoding encoding = req.ContentEncoding;
+                    using (StreamReader reader = new StreamReader(stream, encoding))
+                    {
+                        content = await reader.ReadToEndAsync();
+                    }
+                }
             }
 
             //TODO: Add dynamic paths to methods
@@ -126,9 +128,11 @@ namespace _7DTDWebsockets.Connections
                 List<string> cmdResponse = RunCommand(content);
                 responseBytes = Encoding.UTF8.GetBytes(string.Join("\n", cmdResponse));
                 res.ContentLength64 = responseBytes.LongLength;
-                res.Close(responseBytes, true);
+                await res.OutputStream.WriteAsync(responseBytes, 0, responseBytes.Length);
+                res.Close();
             }
         }
+
 
         private List<string> RunCommand(string command)
         {

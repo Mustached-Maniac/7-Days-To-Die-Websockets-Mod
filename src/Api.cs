@@ -6,8 +6,7 @@ using Newtonsoft.Json;
 using _7DTDWebsockets.patchs;
 using _7DTDWebsockets.Connections;
 
-//original work done by KK
-//removed some unecessary using statements and slight change to authentication method by Mustached_Maniac
+//stipped down version to only send PlayerKillEntity messages for building XP system
 
 namespace _7DTDWebsockets
 {
@@ -20,11 +19,13 @@ namespace _7DTDWebsockets
         {
             Instance = this;
             string path = ModManager.GetMod("WebsocketIntegration").Path + "/Config.xml";
-            
-            XmlReaderSettings settings = new XmlReaderSettings();
-            settings.ConformanceLevel = ConformanceLevel.Fragment;
-            settings.IgnoreWhitespace = true;
-            settings.IgnoreComments = true;
+
+            XmlReaderSettings settings = new XmlReaderSettings
+            {
+                ConformanceLevel = ConformanceLevel.Fragment,
+                IgnoreWhitespace = true,
+                IgnoreComments = true
+            };
             XmlReader reader = XmlReader.Create(path, settings);
 
             Dictionary<string, object> data = new Dictionary<string, object>();
@@ -71,14 +72,14 @@ namespace _7DTDWebsockets
             new Thread(() =>
             {
                 Http = new HttpConnection(port, auth);
-                Http.server.AddWebSocketService<WebsocketConnection>("/");
-                Http.server.Start();
+                Http.Server.AddWebSocketService<WebsocketConnection>("/");
+                Http.Server.Start();
             }).Start();
         }
 
         private void StopConnection()
         {
-            if (Http != null) Http.server.Stop();
+            Http?.Server.Stop();
         }
 
         public static void Send(string eventName, string arguments)
